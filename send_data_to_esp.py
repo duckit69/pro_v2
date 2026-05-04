@@ -4,6 +4,7 @@ import serial
 import time
 import json
 import argparse
+from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 
 def main():
@@ -11,6 +12,8 @@ def main():
     parser.add_argument('--port', type=str, default='/dev/ttyUSB0', help='Serial port')
     parser.add_argument('--baud', type=int, default=115200, help='Baud rate')
     parser.add_argument('--subject', type=str, default='S9', help='Subject to simulate')
+    parser.add_argument('--model-json', type=str, default='output/generic_model.json',
+                        help='Path to generic_model.json exported by export_generic_model.py')
     args = parser.parse_args()
 
     print(f"Loading data for subject {args.subject}...")
@@ -34,14 +37,26 @@ def main():
     X_test = test_df[feature_cols].values
     y_test = test_df['binary_label'].values
     
-    # Load generic model to get scaler parameters
-    # Alternatively, we could fit a scaler on the rest of the subjects like in Part 2.
-    # We will fit it on the rest of the subjects to match Part 2 perfectly.
-    train_df = df[df['subject'] != args.subject]
-    X_train = train_df[feature_cols].values
-    
-    scaler = StandardScaler()
-    scaler.fit(X_train)
+    # Load scaler parameters from generic_model.json (produced by export_generic_model.py).
+    # This guarantees the Python-side normalisation is IDENTICAL to what is
+    # hardcoded in model_weights.h on the device.
+    model_json_path = Path(args.model_json)
+    if not model_json_path.exists():
+        print(f"WARNING: {model_json_path} not found. Falling back to refitting scaler from training data.")
+        train_df = df[df['subject'] != args.subject]
+        X_train = train_df[feature_cols].values
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+    else:
+        with open(model_json_path) as f:
+            model_data = json.load(f)
+        scaler = StandardScaler()
+        scaler.mean_  = np.array(model_data['scaler_mean'])
+        scaler.scale_ = np.array(model_data['scaler_std'])
+        scaler.var_   = scaler.scale_ ** 2
+        scaler.n_features_in_ = len(scaler.mean_)
+        print(f"Scaler loaded from {model_json_path} (held-out: {model_data.get('held_out_subject','?')})")
+
     X_test_scaled = scaler.transform(X_test)
     
     print(f"Connecting to ESP32 on {args.port} at {args.baud} baud...")

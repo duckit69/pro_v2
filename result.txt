@@ -1,0 +1,16 @@
+Total rows: 1499
+mu_tonic: 0 zeros (0.0%), 0 NaNs, mean=1.8189, min=0.0941, max=15.6657
+slope_tonic: 0 zeros (0.0%), 0 NaNs, mean=-0.0001, min=-0.0068, max=0.0185
+sigma_tonic: 0 zeros (0.0%), 0 NaNs, mean=0.0465, min=0.0003, max=1.3217
+nscr: 0 zeros (0.0%), 0 NaNs, mean=57.2789, min=4.0000, max=92.0000
+mu_ampl: 0 zeros (0.0%), 0 NaNs, mean=0.0172, min=0.0018, max=0.3178
+max_ampl: 0 zeros (0.0%), 0 NaNs, mean=0.0971, min=0.0038, max=1.7541
+rise_time: 0 zeros (0.0%), 0 NaNs, mean=0.4988, min=0.2941, max=1.4688
+decay_time: 0 zeros (0.0%), 144 NaNs, mean=0.4020, min=0.2500, max=5.1250
+eda_std: 0 zeros (0.0%), 0 NaNs, mean=0.0516, min=0.0009, max=1.3483
+eda_mean: 0 zeros (0.0%), 0 NaNs, mean=1.8194, min=0.0943, max=15.6119
+eda_median: 0 zeros (0.0%), 0 NaNs, mean=1.8179, min=0.0951, max=15.7034
+eda_p25: 0 zeros (0.0%), 0 NaNs, mean=1.7832, min=0.0912, max=15.5566
+eda_p75: 0 zeros (0.0%), 0 NaNs, mean=1.8554, min=0.0976, max=15.7654
+power_0_02: 0 zeros (0.0%), 0 NaNs, mean=0.0057, min=0.0000, max=0.6011
+power_02_05: 0 zeros (0.0%), 0 NaNs, mean=0.0007, min=0.0000, max=0.0844
