@@ -1,24 +1,21 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import confusion_matrix
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-def simulate_incremental(X, y, generic_model, lr=0.1, buffer_size=50, replay_every=2, k_updates=5):
-    # Fixed to use [0] because coef_ and intercept_ are 2D/1D arrays which break scalar conditions
+def simulate_incremental(X, y, generic_model, lr=0.1, k_updates=10):
+    """No-replay incremental SGD with gradient clipping (10 updates per label)."""
     w = generic_model.coef_[0].copy()
     b = generic_model.intercept_[0].copy()
     
     # Calculate baseline generic accuracy for padding the start of the rolling window
     acc_gen = generic_model.score(X, y)
     
-    replay_buffer = []
     y_pred = []
     rolling_acc = []
     correct_sofar = 0
@@ -34,32 +31,17 @@ def simulate_incremental(X, y, generic_model, lr=0.1, buffer_size=50, replay_eve
             padding_correct = acc_gen * (100 - (i + 1))
             rolling_acc.append((padding_correct + correct_sofar) / 100)
         else:
-            rolling_acc.append((np.array(y_pred)[-100:]==np.array(y)[:i+1][-100:]).mean() )  # careful with indices
-        # update on true label
+            rolling_acc.append((np.array(y_pred)[-100:]==np.array(y)[:i+1][-100:]).mean())
+        # update on true label (10 SGD steps, gradient clipping, no replay)
         for _ in range(k_updates):
             p = 1/(1+np.exp(-(np.dot(w, x)+b)))
             error = y_true - p
             grad_w = lr * error * x
-            # gradient clipping
+            grad_b = lr * error
             if np.linalg.norm(grad_w) > 1.0:
                 grad_w = grad_w / np.linalg.norm(grad_w)
             w += grad_w
-            b += lr * error
-        # add to replay buffer
-        replay_buffer.append((x, y_true))
-        if len(replay_buffer) > buffer_size:
-            replay_buffer.pop(0)
-        # replay every replay_every updates
-        if (i+1) % replay_every == 0:
-            for x_rep, y_rep in replay_buffer:
-                for _ in range(1):  # one pass through buffer
-                    p_rep = 1/(1+np.exp(-(np.dot(w, x_rep)+b)))
-                    error_rep = y_rep - p_rep
-                    grad_w_rep = lr * error_rep * x_rep
-                    if np.linalg.norm(grad_w_rep) > 1.0:
-                        grad_w_rep = grad_w_rep / np.linalg.norm(grad_w_rep)
-                    w += grad_w_rep
-                    b += lr * error_rep
+            b += grad_b
     return np.array(y_pred), np.array(rolling_acc)
 
 def main():
@@ -70,13 +52,10 @@ def main():
     metadata_cols = ['subject', 'window_id', 'binary_label']
     feature_cols = [c for c in df.columns if c not in metadata_cols]
     
-    all_subjects = sorted(df['subject'].unique())
+    target_subjects = ['S10', 'S14', 'S17']
     results = {}
     
-    list_of_generic_cm = []
-    list_of_pers_cm = []
-    
-    for test_subject in all_subjects:
+    for test_subject in target_subjects:
         print(f"Processing {test_subject}...")
         train_df = df[df['subject'] != test_subject]
         test_df = df[df['subject'] == test_subject].copy()
@@ -94,27 +73,14 @@ def main():
         clf = LogisticRegression(random_state=42, max_iter=1000)
         clf.fit(X_train_scaled, y_train)
         
-        # Generic predictions
-        gen_preds = clf.predict(X_test_scaled)
-        cm_gen = confusion_matrix(y_test, gen_preds, labels=[0, 1])
-        # Normalize by true instances per class
-        cm_gen_norm = cm_gen.astype('float') / cm_gen.sum(axis=1)[:, np.newaxis]
-        list_of_generic_cm.append(cm_gen_norm)
-        
-        # Personalized predictions
         y_pred, rolling_acc = simulate_incremental(X_test_scaled, y_test, clf)
         results[test_subject] = rolling_acc
-        
-        cm_pers = confusion_matrix(y_test, y_pred, labels=[0, 1])
-        # Normalize by true instances per class
-        cm_pers_norm = cm_pers.astype('float') / cm_pers.sum(axis=1)[:, np.newaxis]
-        list_of_pers_cm.append(cm_pers_norm)
 
     rolling_acc_S10 = results['S10']
     rolling_acc_S14 = results['S14']
     rolling_acc_S17 = results['S17']
     
-    # Plotting Learning Curves
+    # Plotting
     plt.figure(figsize=(10, 6))
     plt.plot(range(len(rolling_acc_S10)), rolling_acc_S10, label='S10', linewidth=2)
     plt.plot(range(len(rolling_acc_S14)), rolling_acc_S14, label='S14', linewidth=2)
@@ -126,34 +92,6 @@ def main():
     plt.grid(True)
     plt.savefig('learning_curves_v2.png', bbox_inches='tight')
     print("Saved plot to learning_curves_v2.png")
-    
-    # Collect normalised confusion matrices from all subjects (generic and personalised)
-    # Compute average matrix across subjects
-    avg_generic_cm = np.mean(list_of_generic_cm, axis=0)  # each cm is 2x2
-    avg_pers_cm = np.mean(list_of_pers_cm, axis=0)
-    
-    # Plotting CMs
-    plt.figure(figsize=(12, 5))
-    
-    # Generic
-    plt.subplot(1, 2, 1)
-    sns.heatmap(avg_generic_cm * 100, annot=True, fmt='.0f', cmap='Blues',
-                xticklabels=['Non-Stress', 'Stress'], yticklabels=['Non-Stress', 'Stress'])
-    plt.title('Average Confusion Matrix - Generic (%)')
-    plt.ylabel('True Class')
-    plt.xlabel('Predicted Class')
-    
-    # Personalized
-    plt.subplot(1, 2, 2)
-    sns.heatmap(avg_pers_cm * 100, annot=True, fmt='.0f', cmap='Blues',
-                xticklabels=['Non-Stress', 'Stress'], yticklabels=['Non-Stress', 'Stress'])
-    plt.title('Average Confusion Matrix - Personalized (%)')
-    plt.ylabel('True Class')
-    plt.xlabel('Predicted Class')
-    
-    plt.tight_layout()
-    plt.savefig('avg_confusion_matrices_v2.png', bbox_inches='tight')
-    print("Saved plot to avg_confusion_matrices.png")
 
 if __name__ == '__main__':
     main()
